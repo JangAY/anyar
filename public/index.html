@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyCare AI - Asisten Kesehatan Mental</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <style>
+        :root {
+            --primary-start: #667eea;
+            --primary-end: #764ba2;
+            --secondary-start: #4facfe;
+            --secondary-end: #00f2fe;
+            --text-light: #ffffff;
+            --text-dark: #333333;
+            --bg-light: #f8f9fa;
+            --bg-white: #ffffff;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-500: #64748b;
+            --red-50: #fef2f2;
+            --red-600: #dc2626;
+            --red-800: #991b1b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            background: var(--bg-white);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            max-height: 700px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, var(--secondary-start) 0%, var(--secondary-end) 100%);
+            padding: 20px;
+            text-align: center;
+            color: var(--text-light);
+            flex-shrink: 0;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .chat-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 20px;
+            background: var(--bg-light);
+        }
+
+        .emergency-card {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            border: 1px solid var(--red-600);
+            background-color: var(--red-50);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--red-800);
+            font-size: 0.8rem;
+        }
+
+        .emotion-progress-container {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: var(--bg-white);
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        .emotion-progress-container p {
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
+
+        .progress-bar-wrapper {
+            height: 1.25rem;
+            width: 100%;
+            background-color: var(--gray-200);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 50%;
+            background: linear-gradient(to right, var(--secondary-start), var(--secondary-end));
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
+            font-size: 0.75rem;
+            font-weight: bold;
+            transition: width 0.5s ease-in-out, background 0.5s ease-in-out;
+        }
+        
+        .emotion-history-container {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: var(--bg-white);
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .emotion-history-container p.history-title {
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
+        #emotionHistoryList {
+            font-size: 0.8rem;
+            color: var(--gray-500);
+            text-align: center;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+            max-width: 85%;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+            margin-left: auto;
+        }
+        
+        .message.bot { justify-content: flex-start; }
+        
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .message.bot .message-content {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, var(--secondary-start) 0%, var(--secondary-end) 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 0;
+            color: var(--gray-500);
+        }
+
+        .typing-dots span {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; background-color: var(--secondary-start);
+            margin: 0 2px; animation: typing 1.4s infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+
+        .recommendation-card {
+            background: #f0f8ff;
+            border-left: 4px solid var(--secondary-start);
+            padding: 15px; margin: 15px 0; border-radius: 8px;
+            font-size: 0.85rem; color: #333;
+        }
+        .recommendation-card strong {
+            display: block; margin-bottom: 8px; color: #1565c0;
+        }
+        .recommendation-card ul { list-style: none; padding-left: 0; }
+        .recommendation-card li { margin-bottom: 8px; }
+
+        .chat-input-container {
+            padding: 20px; background: var(--bg-white);
+            border-top: 1px solid var(--gray-200); flex-shrink: 0;
+        }
+        .chat-input-form { display: flex; gap: 10px; }
+        .chat-input {
+            flex: 1; padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 25px; outline: none;
+            font-size: 14px; transition: border-color 0.3s;
+        }
+        .chat-input:focus { border-color: var(--secondary-start); }
+        .send-button {
+            background: linear-gradient(135deg, var(--secondary-start) 0%, var(--secondary-end) 100%);
+            color: white; border: none; border-radius: 50%;
+            width: 45px; height: 45px; cursor: pointer;
+            transition: transform 0.2s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .send-button:hover { transform: scale(1.05); }
+        .send-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <header class="chat-header">
+            <h1>🤗 MyCare AI</h1>
+            <p>Asisten kesehatan mental yang siap mendengarkan.</p>
+        </header>
+
+        <div class="chat-body">
+            <div class="emergency-card">
+                <p><strong>Darurat:</strong> Jika Anda dalam krisis, hubungi Hotline Kesehatan Mental Kemenkes RI <strong>119 ext. 8</strong>. Anda tidak sendirian.</p>
+            </div>
+            
+            <div class="emotion-progress-container">
+                <p>Indikator Emosi Saat Ini</p>
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar-fill" id="progressBarFill">Netral (60%)</div>
+                </div>
+            </div>
+
+            <div class="emotion-history-container">
+                <p class="history-title">Riwayat Emosi Terdeteksi</p>
+                <div id="emotionHistoryList">
+                    <p>Belum ada emosi yang terdeteksi.</p>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                 <div class="message bot" id="initial-bot-message">
+                    <div class="message-content">Halo! Aku di sini untuk mendengarkan ceritamu. Jangan ragu untuk berbagi apa yang kamu rasakan hari ini. 💙</div>
+                </div>
+            </div>
+            
+            <div class="typing-indicator" id="typingIndicator">
+                MyCare AI sedang mengetik
+                <div class="typing-dots"><span></span><span></span><span></span></div>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <form class="chat-input-form" id="chatForm">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Ceritakan apa yang kamu rasakan..." autocomplete="off">
+                <button type="submit" class="send-button" id="sendButton">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22,2 15,22 11,13 2,9"></polygon></svg>
+                </button>
+            </form>
+             <button id="resetTopicBtn" style="width: 100%; margin-top: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 20px; background: #f1f1f1; cursor: pointer; font-size: 14px;">
+                Ganti Topik / Mulai Baru
+            </button>
+        </div>
+    </div>
+
+<script>
+class MyCareAIChatbot {
+    constructor() {
+        this.model = null;
+        this.tokenizer = null;
+        this.conversationHistory = [];
+        this.classificationHistory = [];
+        this.messageCount = 0;
+        this.emotionThreshold = 3;
+        this.activeEmotion = null;
+        this.focusMessageCounter = 0;
+        this.FOCUS_DURATION = 3;
+        this.neutralKeywords = ['terima kasih', 'makasih', 'bye', 'dadah', 'oke', 'ok', 'siap', 'sampai jumpa', 'selamat tinggal'];
+        this.emotionPriority = ['suicidal', 'anger', 'fear', 'sadness', 'neutral'];
+        this.recommendationsData = {
+            sadness: { music: "Musik Instrumental Menenangkan", articles: "Artikel: Tips Mengelola Kesedihan", meditation: "Meditasi: Pernapasan Dalam untuk Ketenangan", journaling: "Tulis 3 hal yang kamu syukuri hari ini." },
+            anger: { music: "Musik Klasik atau Ambient", articles: "Artikel: Teknik Manajemen Amarah", meditation: "Meditasi: Body Scan untuk Melepas Ketegangan", journaling: "Apa pemicu perasaan ini? Tulis tanpa menghakimi." },
+            fear: { music: "Musik Alam (Suara Hujan atau Hutan)", articles: "Artikel: Cara Menghadapi Rasa Cemas", meditation: "Meditasi: Visualisasi Tempat yang Aman", journaling: "Langkah kecil apa yang bisa kamu ambil sekarang?" },
+            suicidal: { music: "Musik Penuh Harapan dan Menguatkan", articles: "Artikel: Pentingnya Mencari Bantuan Profesional", meditation: "Meditasi: Fokus pada Lima Indra (5-4-3-2-1)", journaling: "Tulis satu nama orang yang peduli padamu." }
+        };
+        this.emotionToProgress = { suicidal: 10, anger: 25, fear: 35, sadness: 45, neutral: 60, calm: 80, happy: 85, love: 70 };
+        this.emotionNames = { sadness: 'Sedih', anger: 'Marah', fear: 'Cemas', suicidal: 'Krisis', neutral: 'Netral', calm: 'Tenang', happy: 'Senang', love: 'Disayangi' };
+        
+        this.initialize();
+    }
+
+    async initialize() {
+        try {
+            await tf.setBackend('cpu');
+            console.log('Backend TF.js berhasil diatur ke CPU.');
+        } catch (error) {
+            console.error('Gagal mengatur backend TF.js ke CPU:', error);
+        }
+        this.chatForm = document.getElementById('chatForm');
+        this.chatInput = document.getElementById('chatInput');
+        this.sendButton = document.getElementById('sendButton');
+        this.chatMessages = document.getElementById('chatMessages');
+        this.typingIndicator = document.getElementById('typingIndicator');
+        this.initialBotMessage = document.getElementById('initial-bot-message');
+        this.progressBarFill = document.getElementById('progressBarFill');
+        this.emotionHistoryList = document.getElementById('emotionHistoryList');
+        
+        // [BARU] Dapatkan elemen tombol reset
+        this.resetTopicBtn = document.getElementById('resetTopicBtn');
+
+        await this.loadModel();
+        this.initializeEventListeners();
+        this.updateProgressBar(this.emotionToProgress.neutral, 'Netral');
+    }
+
+    initializeEventListeners() {
+        this.chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.sendMessage();
+        });
+
+        // [BARU] Tambahkan event listener untuk tombol reset
+        this.resetTopicBtn.addEventListener('click', () => this.resetTopic());
+    }
+
+    // [BARU] Fungsi khusus untuk mereset state percakapan secara manual
+    resetTopic() {
+        console.log("Topik direset oleh pengguna secara manual.");
+        this.addMessage("Oke, aku siap mendengarkan cerita atau topik yang baru. Silakan ceritakan apa yang kamu rasakan.", "bot");
+        this.activeEmotion = null;
+        this.focusMessageCounter = 0;
+        this.messageCount = 0;
+        this.updateProgressBar(this.emotionToProgress.neutral, 'Netral');
+        this.chatInput.focus();
+    }
+
+    async loadModel() {
+        const modelPath = './tfjs_emotion_model/model.json';
+        const tokenizerPath = './tfjs_emotion_model/tokenizer_health.json';
+        try {
+            this.model = await tf.loadLayersModel(modelPath);
+            console.log("Model TFJS berhasil dimuat.");
+            const tokenizerResponse = await fetch(tokenizerPath);
+            if (!tokenizerResponse.ok) throw new Error(`Gagal memuat tokenizer, status: ${tokenizerResponse.status}`);
+            const tokenizerData = await tokenizerResponse.json();
+            this.tokenizer = tokenizerData.word_index || tokenizerData;
+            console.log("Tokenizer berhasil dimuat.");
+        } catch (error) {
+            console.error("KRITIS: Gagal memuat model TFJS atau tokenizer.", error);
+            this.addMessage("Maaf, fitur analisis emosi saat ini sedang bermasalah. Tapi tenang, aku tetap di sini untuk mendengarkan ceritamu.", "bot");
+        }
+    }
+    
+    tokenize(text) {
+        const sequences = [];
+        const words = text.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+        for (let word of words) {
+            sequences.push(this.tokenizer[word] || 0);
+        }
+        const MAX_LEN = 100;
+        while (sequences.length < MAX_LEN) {
+            sequences.push(0);
+        }
+        if (sequences.length > MAX_LEN) {
+            sequences.length = MAX_LEN;
+        }
+        return tf.tensor2d([sequences], [1, MAX_LEN]);
+    }
+    
+    updateProgressBar(progressValue, emotionText) {
+        const value = Math.max(0, Math.min(100, progressValue));
+        this.progressBarFill.style.width = `${value}%`;
+        this.progressBarFill.textContent = `${emotionText} (${value}%)`;
+        if (value <= 20) { this.progressBarFill.style.background = 'var(--red-600)'; } 
+        else if (value <= 45) { this.progressBarFill.style.background = `linear-gradient(to right, #F87171, #FBBF24)`; } 
+        else { this.progressBarFill.style.background = `linear-gradient(to right, var(--secondary-start), var(--secondary-end))`; }
+    }
+
+    // [DIROMBAK TOTAL] Fungsi ini sekarang menggabungkan logika re-klasifikasi otomatis dan mode fokus
+    async sendMessage() {
+        const message = this.chatInput.value.trim();
+        if (!message) return;
+
+        if (this.initialBotMessage) {
+            this.initialBotMessage.remove();
+            this.initialBotMessage = null;
+        }
+
+        this.addMessage(message, 'user');
+        this.chatInput.value = '';
+        
+        this.conversationHistory.push({ role: 'user', content: message });
+        this.showTypingIndicator();
+        this.sendButton.disabled = true;
+
+        try {
+            this.messageCount++;
+
+            if (this.messageCount >= this.emotionThreshold) {
+                const previousEmotion = this.activeEmotion;
+                await this.performEmotionClassification();
+                if (this.activeEmotion !== previousEmotion) {
+                    this.focusMessageCounter = 0;
+                    console.log(`Perubahan emosi terdeteksi: ${previousEmotion} -> ${this.activeEmotion}. Mode fokus direset.`);
+                }
+                this.messageCount = 0;
+            }
+
+            const response = await this.sendToBackend(message);
+            this.addMessage(response.reply, 'bot');
+            this.conversationHistory.push({ role: 'assistant', content: response.reply });
+
+            if (this.activeEmotion) {
+                this.focusMessageCounter++;
+                if (this.focusMessageCounter >= this.FOCUS_DURATION || this.isNeutralMessage(message)) {
+                    const lastEmotionName = this.emotionNames[this.activeEmotion] || 'itu';
+                    this.addMessage(`Baik, terima kasih sudah berbagi tentang perasaan (${lastEmotionName}) tadi. Aku siap mendengarkan hal baru lagi jika kamu mau. 😊`, 'bot');
+                    
+                    this.classificationHistory.push({
+                        emotion: this.activeEmotion,
+                        name: this.emotionNames[this.activeEmotion] || 'Tidak Dikenal',
+                        timestamp: new Date()
+                    });
+                    this.renderClassificationHistory();
+                    
+                    this.updateProgressBar(this.emotionToProgress.neutral, 'Netral');
+                    this.activeEmotion = null;
+                    this.focusMessageCounter = 0;
+                    this.messageCount = 0; 
+                }
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            this.addMessage('Maaf, terjadi kesalahan di server kami. Coba lagi nanti ya. 🙏', 'bot');
+        } finally {
+            this.hideTypingIndicator();
+            this.sendButton.disabled = false;
+            this.chatInput.focus();
+        }
+    }
+    
+    isNeutralMessage(message) {
+        const lowerCaseMessage = message.toLowerCase();
+        return this.neutralKeywords.some(keyword => lowerCaseMessage.includes(keyword));
+    }
+
+    async sendToBackend(message) {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                conversation_history: this.conversationHistory,
+                active_emotion: this.activeEmotion
+            })
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Network response was not ok: ${response.statusText}`);
+        }
+        return await response.json();
+    }
+    
+    determineFinalEmotion(emotions) {
+        if (!emotions || emotions.length === 0) return 'neutral';
+        const counts = emotions.reduce((acc, emotion) => {
+            acc[emotion] = (acc[emotion] || 0) + 1;
+            return acc;
+        }, {});
+        const maxCount = Math.max(...Object.values(counts));
+        const topEmotions = Object.keys(counts).filter(emotion => counts[emotion] === maxCount);
+        if (topEmotions.length === 1) return topEmotions[0];
+        for (const priority of this.emotionPriority) {
+            if (topEmotions.includes(priority)) return priority;
+        }
+        return topEmotions[0] || 'neutral';
+    }
+
+    async performEmotionClassification() {
+        if (!this.model || !this.tokenizer) {
+            console.warn("Klasifikasi dilewati: model/tokenizer tidak tersedia.");
+            return;
+        }
+        const recentMessages = this.conversationHistory.filter(msg => msg.role === 'user').slice(-this.emotionThreshold).map(msg => msg.content);
+        if (recentMessages.length === 0) return;
+
+        console.log(`Memulai klasifikasi untuk ${recentMessages.length} pesan terpisah...`);
+        this.addMessage("Bentar ya, aku coba pahami perasaanmu lebih dalam...", "bot");
+
+        try {
+            const classificationPromises = recentMessages.map(async (message) => {
+                const translateResponse = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: message })
+                });
+                if (!translateResponse.ok) throw new Error('Gagal menerjemahkan');
+                const { translated_text } = await translateResponse.json();
+                const inputTensor = this.tokenize(translated_text);
+                const prediction = this.model.predict(inputTensor);
+                const output = await prediction.data();
+                tf.dispose([inputTensor, prediction]);
+                const emotionLabels = ['sadness', 'suicidal', 'anger', 'fear'];
+                const predictedIndex = output.indexOf(Math.max(...output));
+                return emotionLabels[predictedIndex];
+            });
+            const detectedEmotions = await Promise.all(classificationPromises);
+            console.log("Hasil klasifikasi individual:", detectedEmotions);
+            const finalEmotion = this.determineFinalEmotion(detectedEmotions);
+            this.activeEmotion = finalEmotion;
+            console.log(`Emosi final yang disimpulkan: ${finalEmotion}`);
+            const progress = this.emotionToProgress[finalEmotion] || 60;
+            const emotionName = this.emotionNames[finalEmotion] || 'Netral';
+            this.updateProgressBar(progress, emotionName);
+            this.showRecommendationCard(finalEmotion);
+        } catch (error) {
+            console.error("Gagal melakukan klasifikasi emosi gabungan:", error);
+            this.addMessage("Sepertinya aku sedikit kesulitan memahami emosimu saat ini. Tapi jangan khawatir, aku tetap di sini mendengarkan.", "bot");
+            this.activeEmotion = null;
+        }
+    }
+
+    renderClassificationHistory() {
+        this.emotionHistoryList.innerHTML = '';
+        if (this.classificationHistory.length === 0) {
+            this.emotionHistoryList.innerHTML = '<p>Belum ada emosi yang terdeteksi.</p>';
+            return;
+        }
+        this.classificationHistory.forEach(item => {
+            const historyDiv = document.createElement('div');
+            historyDiv.className = 'history-item';
+            const timeString = item.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            historyDiv.innerHTML = `<span><strong>${item.name}</strong> terdeteksi</span><span>${timeString}</span>`;
+            this.emotionHistoryList.appendChild(historyDiv);
+        });
+    }
+
+    showRecommendationCard(emotion) {
+        const recommendations = this.recommendationsData[emotion];
+        if (!recommendations) return;
+        const card = document.createElement('div');
+        card.className = 'recommendation-card';
+        const emotionName = this.emotionNames[emotion] || emotion;
+        card.innerHTML = `
+            <strong>🎯 Mode Fokus Aktif:</strong> Aku merasakan ada nuansa <strong>${emotionName}</strong> dalam ceritamu. Mari kita bahas ini lebih dalam ya.
+            <br><br>
+            <strong>💡 Mungkin beberapa hal ini bisa membantu menenangkanmu:</strong>
+            <ul>
+                <li>🎵 <strong>Musik:</strong> Coba dengarkan ${recommendations.music}.</li>
+                <li>🧘 <strong>Meditasi:</strong> Luangkan waktu untuk ${recommendations.meditation}.</li>
+                <li>📝 <strong>Jurnal:</strong> Renungkan dan tulis tentang: "${recommendations.journaling}"</li>
+                <li>📚 <strong>Bacaan:</strong> Cari tahu lebih lanjut tentang ${recommendations.articles}.</li>
+            </ul>`;
+        this.chatMessages.appendChild(card);
+        this.scrollToBottom();
+    }
+    
+    addMessage(content, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = content;
+        messageDiv.appendChild(contentDiv);
+        this.chatMessages.appendChild(messageDiv);
+        this.scrollToBottom();
+    }
+
+    showTypingIndicator() { this.typingIndicator.style.display = 'flex'; this.scrollToBottom(); }
+    hideTypingIndicator() { this.typingIndicator.style.display = 'none'; }
+    scrollToBottom() { setTimeout(() => { this.chatMessages.parentElement.scrollTop = this.chatMessages.parentElement.scrollHeight; }, 100); }
+}
+
+document.addEventListener('DOMContentLoaded', () => { new MyCareAIChatbot(); });
+</script>
+</body>
+</html>
